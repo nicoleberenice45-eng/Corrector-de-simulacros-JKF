@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template_string, send_file
+from flask import Flask, request, render_template, send_file
 import pandas as pd
 import io
 import os
@@ -6,13 +6,14 @@ import os
 app = Flask(__name__)
 
 # ==============================
-# DATA GLOBAL (NO SESSION ❗)
+# DATA GLOBAL
 # ==============================
 
 clave_global = []
 alumnos_global = []
 aulas_global = []
-resultados_global = []
+resultado_global = None
+detalle_global = {}
 
 # ==============================
 # CURSOS
@@ -45,20 +46,18 @@ cursos = {
 # ==============================
 
 def corregir(respuestas):
+    global detalle_global
+
     c = i = b = 0
     detalle = {}
-    colores = []
 
     for x in range(100):
         if respuestas[x] == "":
             b += 1
-            colores.append("gray")
         elif respuestas[x] == clave_global[x]:
             c += 1
-            colores.append("green")
         else:
             i += 1
-            colores.append("red")
 
     puntaje = c*20 - i*5
 
@@ -74,218 +73,8 @@ def corregir(respuestas):
         detalle[curso] = cont
         inicio = fin
 
-    return c,i,b,puntaje,detalle,colores
-
-# ==============================
-# HTML PRO
-# ==============================
-
-HTML = """
-<!DOCTYPE html>
-<html>
-<head>
-<title>Simulacros PRO</title>
-
-<style>
-body {
-    margin:0;
-    font-family:'Segoe UI';
-    display:flex;
-}
-
-/* SIDEBAR */
-.sidebar {
-    width:250px;
-    background:#1b5e20;
-    color:white;
-    height:100vh;
-    padding:20px;
-}
-
-.logo {
-    font-size:20px;
-    font-weight:bold;
-    margin-bottom:30px;
-}
-
-.menu div {
-    margin:15px 0;
-    padding:10px;
-    background:#2e7d32;
-    border-radius:8px;
-}
-
-/* MAIN */
-.main {
-    flex:1;
-    padding:20px;
-    background:#f5f5f5;
-}
-
-.top {
-    display:flex;
-    gap:10px;
-    margin-bottom:20px;
-}
-
-select, button {
-    padding:10px;
-    border-radius:8px;
-    border:none;
-}
-
-button {
-    background:#2e7d32;
-    color:white;
-}
-
-/* CARDS */
-.grid {
-    display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:20px;
-}
-
-.card {
-    background:white;
-    border-radius:15px;
-    padding:15px;
-}
-
-.card h3 {
-    background:#2e7d32;
-    color:white;
-    padding:10px;
-    border-radius:10px;
-}
-
-/* INPUTS */
-.inputs {
-    display:flex;
-    flex-wrap:wrap;
-    gap:5px;
-    margin-top:10px;
-}
-
-input {
-    width:35px;
-    height:35px;
-    text-align:center;
-    border-radius:6px;
-}
-
-/* PROGRESS */
-.progress {
-    height:10px;
-    background:#ccc;
-    margin-top:10px;
-    border-radius:10px;
-}
-
-.bar {
-    height:10px;
-    background:#4caf50;
-    width:0%;
-    border-radius:10px;
-}
-</style>
-
-<script>
-function mover(e,next){
-    let v = e.value.toUpperCase();
-    e.value = v;
-
-    if(["A","B","C","D","E"].includes(v)){
-        let n = document.getElementsByName("p"+next)[0];
-        if(n) n.focus();
-    }
-
-    actualizar();
-}
-
-function actualizar(){
-    let inputs = document.querySelectorAll("input");
-    let llenos = 0;
-
-    inputs.forEach(i=>{
-        if(i.value!="") llenos++;
-    });
-
-    let p = Math.round((llenos/100)*100);
-    document.getElementById("bar").style.width = p+"%";
-}
-</script>
-
-</head>
-
-<body>
-
-<div class="sidebar">
-    <div class="logo">JFK Simulacros</div>
-
-    <form method="POST" enctype="multipart/form-data">
-        <p>Claves</p>
-        <input type="file" name="clave" onchange="this.form.submit()">
-
-        <p>Alumnos</p>
-        <input type="file" name="alumnos" onchange="this.form.submit()">
-    </form>
-
-    <div class="progress">
-        <div class="bar" id="bar"></div>
-    </div>
-</div>
-
-<div class="main">
-
-<form method="POST">
-
-<div class="top">
-<select name="nombre">
-{% for a in alumnos %}
-<option>{{a}}</option>
-{% endfor %}
-</select>
-
-<select name="aula">
-{% for a in aulas %}
-<option>{{a}}</option>
-{% endfor %}
-</select>
-
-<button>Corregir</button>
-</div>
-
-<div class="grid">
-
-{% set i = 1 %}
-{% for curso, cant in cursos.items() %}
-<div class="card">
-<h3>{{curso}}</h3>
-
-<div class="inputs">
-{% for j in range(cant) %}
-<input name="p{{i}}" maxlength="1" onkeyup="mover(this, {{i+1}})">
-{% set i = i + 1 %}
-{% endfor %}
-</div>
-
-</div>
-{% endfor %}
-
-</div>
-
-</form>
-
-{% if resultado %}
-<h2>Puntaje: {{resultado[3]}}</h2>
-{% endif %}
-
-</div>
-
-</body>
-</html>
-"""
+    detalle_global = detalle
+    return c,i,b,puntaje,detalle
 
 # ==============================
 # RUTA
@@ -293,59 +82,47 @@ function actualizar(){
 
 @app.route("/", methods=["GET","POST"])
 def index():
-    global clave_global, alumnos_global, aulas_global, resultados_global
-
-    resultado = None
+    global clave_global, alumnos_global, aulas_global, resultado_global
 
     if request.method == "POST":
 
+        # CLAVE
         if "clave" in request.files:
             f = request.files["clave"]
             if f.filename != "":
-                df = pd.read_excel(f)
-                clave_global = df.iloc[:,0].astype(str).str.upper().tolist()
+                df = pd.read_excel(f, header=None)
+
+                col = df.iloc[:,0].dropna()
+                col = col.astype(str).str.strip().str.upper()
+                col = col[col.isin(["A","B","C","D","E"])]
+
+                clave_global = col.tolist()
 
                 if len(clave_global) != 100:
-                    return "Error: clave debe tener 100 respuestas"
+                    return f"Error: {len(clave_global)} respuestas detectadas"
 
+        # ALUMNOS
         if "alumnos" in request.files:
             f = request.files["alumnos"]
             if f.filename != "":
-                df = pd.read_excel(f)
+                df = pd.read_excel(f, header=None)
                 alumnos_global = df.iloc[:,0].tolist()
                 aulas_global = df.iloc[:,1].unique().tolist()
 
-        if "nombre" in request.form and len(clave_global)==100:
-
+        # CORREGIR
+        if "nombre" in request.form and len(clave_global) == 100:
             respuestas = [request.form.get(f"p{i}","").upper() for i in range(1,101)]
 
-            c,i,b,p,detalle,colores = corregir(respuestas)
-            resultado = (c,i,b,p)
+            c,i,b,p,detalle = corregir(respuestas)
+            resultado_global = (c,i,b,p)
 
-            resultados_global.append({
-                "Nombre": request.form["nombre"],
-                "Aula": request.form["aula"],
-                "Puntaje": p
-            })
-
-    return render_template_string(HTML,
+    return render_template("index.html",
         alumnos=alumnos_global,
         aulas=aulas_global,
         cursos=cursos,
-        resultado=resultado
+        resultado=resultado_global,
+        detalle=detalle_global
     )
-
-# ==============================
-# EXCEL
-# ==============================
-
-@app.route("/excel")
-def excel():
-    df = pd.DataFrame(resultados_global)
-    output = io.BytesIO()
-    df.to_excel(output, index=False)
-    output.seek(0)
-    return send_file(output, download_name="resultados.xlsx", as_attachment=True)
 
 # ==============================
 
