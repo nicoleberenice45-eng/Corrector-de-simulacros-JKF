@@ -1,10 +1,18 @@
-from flask import Flask, request, render_template_string, send_file, session
+from flask import Flask, request, render_template_string, send_file
 import pandas as pd
 import io
 import os
 
 app = Flask(__name__)
-app.secret_key = "academia_pro_123"
+
+# ==============================
+# DATA GLOBAL (NO SESSION ❗)
+# ==============================
+
+clave_global = []
+alumnos_global = []
+aulas_global = []
+resultados_global = []
 
 # ==============================
 # CURSOS
@@ -36,7 +44,7 @@ cursos = {
 # CORREGIR
 # ==============================
 
-def corregir(respuestas, clave):
+def corregir(respuestas):
     c = i = b = 0
     detalle = {}
     colores = []
@@ -45,7 +53,7 @@ def corregir(respuestas, clave):
         if respuestas[x] == "":
             b += 1
             colores.append("gray")
-        elif respuestas[x] == clave[x]:
+        elif respuestas[x] == clave_global[x]:
             c += 1
             colores.append("green")
         else:
@@ -60,7 +68,7 @@ def corregir(respuestas, clave):
         cont = 0
 
         for j in range(inicio, fin):
-            if respuestas[j] == clave[j]:
+            if respuestas[j] == clave_global[j]:
                 cont += 1
 
         detalle[curso] = cont
@@ -69,7 +77,7 @@ def corregir(respuestas, clave):
     return c,i,b,puntaje,detalle,colores
 
 # ==============================
-# HTML
+# HTML PRO
 # ==============================
 
 HTML = """
@@ -80,150 +88,131 @@ HTML = """
 
 <style>
 body {
-    font-family: 'Segoe UI', sans-serif;
-    background: linear-gradient(135deg, #1b5e20, #4caf50, #cddc39, #fff176);
-    background-size: 400% 400%;
-    animation: fondoAnimado 10s ease infinite;
-    text-align:center;
+    margin:0;
+    font-family:'Segoe UI';
+    display:flex;
+}
+
+/* SIDEBAR */
+.sidebar {
+    width:250px;
+    background:#1b5e20;
     color:white;
-}
-
-@keyframes fondoAnimado {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
-
-.container {
-    width:90%;
-    max-width:1000px;
-    margin:auto;
-}
-
-.card {
-    background:white;
-    color:#333;
+    height:100vh;
     padding:20px;
-    margin:20px;
-    border-radius:15px;
-    transition: transform 0.3s, box-shadow 0.3s;
 }
 
-.card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0px 10px 25px rgba(0,0,0,0.2);
+.logo {
+    font-size:20px;
+    font-weight:bold;
+    margin-bottom:30px;
 }
 
-.file-input {
-    display:inline-block;
-    padding:10px 20px;
+.menu div {
+    margin:15px 0;
+    padding:10px;
     background:#2e7d32;
-    color:white;
     border-radius:8px;
-    cursor:pointer;
 }
 
-input[type="file"] { display:none; }
+/* MAIN */
+.main {
+    flex:1;
+    padding:20px;
+    background:#f5f5f5;
+}
 
-select {
+.top {
+    display:flex;
+    gap:10px;
+    margin-bottom:20px;
+}
+
+select, button {
     padding:10px;
     border-radius:8px;
-    margin:10px;
+    border:none;
 }
 
 button {
     background:#2e7d32;
     color:white;
-    padding:10px 20px;
-    border:none;
-    border-radius:8px;
-    transition:0.3s;
 }
 
-button:hover {
-    background:#1b5e20;
-    transform: scale(1.05);
-}
-
+/* CARDS */
 .grid {
     display:grid;
-    grid-template-columns: repeat(4,1fr);
+    grid-template-columns:repeat(3,1fr);
     gap:20px;
 }
 
-.columna { display:flex; flex-direction:column; }
-.fila { display:flex; gap:5px; justify-content:center; }
-
-input.resp {
-    width:40px;
-    height:40px;
-    text-align:center;
-    border-radius:8px;
-    border:1px solid #ccc;
-    font-weight:bold;
-    transition:0.2s;
+.card {
+    background:white;
+    border-radius:15px;
+    padding:15px;
 }
 
-input.resp:focus {
-    outline:none;
-    border:2px solid #2e7d32;
-    transform: scale(1.1);
-}
-
-.green { background:#b6fcb6; }
-.red { background:#ffb3b3; }
-.gray { background:#eee; }
-
-table {
-    margin:auto;
-    border-collapse:collapse;
-    width:90%;
-}
-
-th {
+.card h3 {
     background:#2e7d32;
     color:white;
+    padding:10px;
+    border-radius:10px;
 }
 
-tr:nth-child(even) {
-    background:#f2f2f2;
+/* INPUTS */
+.inputs {
+    display:flex;
+    flex-wrap:wrap;
+    gap:5px;
+    margin-top:10px;
 }
 
+input {
+    width:35px;
+    height:35px;
+    text-align:center;
+    border-radius:6px;
+}
+
+/* PROGRESS */
+.progress {
+    height:10px;
+    background:#ccc;
+    margin-top:10px;
+    border-radius:10px;
+}
+
+.bar {
+    height:10px;
+    background:#4caf50;
+    width:0%;
+    border-radius:10px;
+}
 </style>
 
 <script>
-function subir(form){ form.submit(); }
+function mover(e,next){
+    let v = e.value.toUpperCase();
+    e.value = v;
 
-function mover(e, next){
-    let val = e.value.toUpperCase();
-    e.value = val;
-
-    if(["A","B","C","D","E"].includes(val)){
-        e.style.border = "2px solid green";
-        let nextInput = document.getElementsByName("p"+next)[0];
-        if(nextInput){ nextInput.focus(); }
-    } else if(val !== ""){
-        e.style.border = "2px solid red";
+    if(["A","B","C","D","E"].includes(v)){
+        let n = document.getElementsByName("p"+next)[0];
+        if(n) n.focus();
     }
 
-    actualizarBarra();
+    actualizar();
 }
 
-function actualizarBarra(){
-    let inputs = document.querySelectorAll("input.resp");
+function actualizar(){
+    let inputs = document.querySelectorAll("input");
     let llenos = 0;
 
     inputs.forEach(i=>{
-        if(i.value !== "") llenos++;
+        if(i.value!="") llenos++;
     });
 
-    let porcentaje = Math.round((llenos/100)*100);
-
-    let barra = document.getElementById("barra");
-    if(barra){
-        barra.style.width = porcentaje + "%";
-        barra.innerText = porcentaje + "%";
-    }
+    let p = Math.round((llenos/100)*100);
+    document.getElementById("bar").style.width = p+"%";
 }
 </script>
 
@@ -231,131 +220,65 @@ function actualizarBarra(){
 
 <body>
 
-<h1>📊 Corrector de Simulacros</h1>
+<div class="sidebar">
+    <div class="logo">JFK Simulacros</div>
 
-<div class="container">
+    <form method="POST" enctype="multipart/form-data">
+        <p>Claves</p>
+        <input type="file" name="clave" onchange="this.form.submit()">
 
-<div class="card">
-<form method="POST" enctype="multipart/form-data">
+        <p>Alumnos</p>
+        <input type="file" name="alumnos" onchange="this.form.submit()">
+    </form>
 
-<h3>Subir CLAVES</h3>
-<label class="file-input">
-Seleccionar archivo
-<input type="file" name="clave" onchange="subir(this.form)">
-</label>
+    <div class="progress">
+        <div class="bar" id="bar"></div>
+    </div>
+</div>
 
-<h3>Subir ALUMNOS</h3>
-<label class="file-input">
-Seleccionar archivo
-<input type="file" name="alumnos" onchange="subir(this.form)">
-</label>
+<div class="main">
 
-<br><br>
+<form method="POST">
 
-{% if alumnos %}
+<div class="top">
 <select name="nombre">
 {% for a in alumnos %}
 <option>{{a}}</option>
 {% endfor %}
 </select>
-{% endif %}
 
-{% if aulas %}
 <select name="aula">
 {% for a in aulas %}
 <option>{{a}}</option>
 {% endfor %}
 </select>
-{% endif %}
 
-<!-- BARRA -->
-<div style="margin:20px;">
-    <div style="background:#ddd; border-radius:20px;">
-        <div id="barra" style="
-            width:0%;
-            background:#2e7d32;
-            color:white;
-            padding:5px;
-            border-radius:20px;
-        ">0%</div>
-    </div>
+<button>Corregir</button>
 </div>
 
 <div class="grid">
-{% for col in range(4) %}
-<div class="columna">
-{% for i in range(col*25+1, col*25+26) %}
-<div class="fila">
-<span>{{i}}</span>
-<input name="p{{i}}" maxlength="1"
-class="resp {{colores[i-1] if colores else ''}}"
-onkeyup="mover(this, {{i+1}})">
-</div>
-{% endfor %}
-</div>
+
+{% set i = 1 %}
+{% for curso, cant in cursos.items() %}
+<div class="card">
+<h3>{{curso}}</h3>
+
+<div class="inputs">
+{% for j in range(cant) %}
+<input name="p{{i}}" maxlength="1" onkeyup="mover(this, {{i+1}})">
+{% set i = i + 1 %}
 {% endfor %}
 </div>
 
-<br>
-<button type="submit">Corregir</button>
+</div>
+{% endfor %}
+
+</div>
 
 </form>
-</div>
 
 {% if resultado %}
-<div class="card">
-
-<h2>Resultado</h2>
-<p>✔ Correctas: {{resultado[0]}}</p>
-<p>❌ Incorrectas: {{resultado[1]}}</p>
-<p>⚪ Blanco: {{resultado[2]}}</p>
-<p>🎯 Puntaje: {{resultado[3]}}</p>
-
-<h3>Por Curso</h3>
-<ul>
-{% for c in detalle %}
-<li>{{c}}: {{detalle[c]}}</li>
-{% endfor %}
-</ul>
-
-<h3>📋 Alumnos corregidos</h3>
-<table border="1">
-<tr>
-<th>Nombre</th><th>Aula</th><th>Puntaje</th>
-</tr>
-{% for r in resultados %}
-<tr>
-<td>{{r["Nombre"]}}</td>
-<td>{{r["Aula"]}}</td>
-<td>{{r["Puntaje"]}}</td>
-</tr>
-{% endfor %}
-</table>
-
-<h3>🏆 Ranking por Aula</h3>
-
-{% for aula in ranking %}
-<h4>{{aula}}</h4>
-
-<table border="1">
-<tr>
-<th>#</th><th>Nombre</th><th>Puntaje</th>
-</tr>
-
-{% for r in ranking[aula] %}
-<tr>
-<td>{{loop.index}}</td>
-<td>{{r["Nombre"]}}</td>
-<td>{{r["Puntaje"]}}</td>
-</tr>
-{% endfor %}
-</table>
-{% endfor %}
-
-<br>
-<a href="/excel"><button>Descargar Excel</button></a>
-
-</div>
+<h2>Puntaje: {{resultado[3]}}</h2>
 {% endif %}
 
 </div>
@@ -365,86 +288,64 @@ onkeyup="mover(this, {{i+1}})">
 """
 
 # ==============================
-# RUTA PRINCIPAL
+# RUTA
 # ==============================
 
 @app.route("/", methods=["GET","POST"])
 def index():
-    if request.method == "GET":
-        session.clear()
-
-    if "resultados" not in session:
-        session["resultados"] = []
+    global clave_global, alumnos_global, aulas_global, resultados_global
 
     resultado = None
-    detalle = {}
-    colores = None
 
     if request.method == "POST":
 
-        archivo_clave = request.files.get("clave")
-        if archivo_clave and archivo_clave.filename != "":
-            df = pd.read_excel(archivo_clave)
-            session["clave"] = df[df.columns[0]].astype(str).str.upper().tolist()
+        if "clave" in request.files:
+            f = request.files["clave"]
+            if f.filename != "":
+                df = pd.read_excel(f)
+                clave_global = df.iloc[:,0].astype(str).str.upper().tolist()
 
-        archivo_alumnos = request.files.get("alumnos")
-        if archivo_alumnos and archivo_alumnos.filename != "":
-            df = pd.read_excel(archivo_alumnos)
-            session["alumnos"] = df[df.columns[0]].tolist()
-            session["aulas"] = df[df.columns[1]].unique().tolist()
+                if len(clave_global) != 100:
+                    return "Error: clave debe tener 100 respuestas"
 
-        if "clave" in session and "nombre" in request.form:
+        if "alumnos" in request.files:
+            f = request.files["alumnos"]
+            if f.filename != "":
+                df = pd.read_excel(f)
+                alumnos_global = df.iloc[:,0].tolist()
+                aulas_global = df.iloc[:,1].unique().tolist()
 
-            respuestas = [request.form.get(f"p{i}", "").upper() for i in range(1,101)]
+        if "nombre" in request.form and len(clave_global)==100:
 
-            c,i,b,p,detalle,colores = corregir(respuestas, session["clave"])
+            respuestas = [request.form.get(f"p{i}","").upper() for i in range(1,101)]
+
+            c,i,b,p,detalle,colores = corregir(respuestas)
             resultado = (c,i,b,p)
 
-            datos = session["resultados"]
-            datos.append({
+            resultados_global.append({
                 "Nombre": request.form["nombre"],
                 "Aula": request.form["aula"],
-                "Correctas": c,
-                "Incorrectas": i,
-                "Blanco": b,
-                "Puntaje": p,
-                **detalle
+                "Puntaje": p
             })
-            session["resultados"] = datos
-
-    ranking = {}
-    for r in session.get("resultados", []):
-        aula = r["Aula"]
-        if aula not in ranking:
-            ranking[aula] = []
-        ranking[aula].append(r)
-
-    for aula in ranking:
-        ranking[aula] = sorted(ranking[aula], key=lambda x: x["Puntaje"], reverse=True)
 
     return render_template_string(HTML,
-        alumnos=session.get("alumnos"),
-        aulas=session.get("aulas"),
-        resultado=resultado,
-        detalle=detalle,
-        colores=colores,
-        resultados=session.get("resultados", []),
-        ranking=ranking
+        alumnos=alumnos_global,
+        aulas=aulas_global,
+        cursos=cursos,
+        resultado=resultado
     )
 
 # ==============================
-# EXPORTAR EXCEL
+# EXCEL
 # ==============================
 
 @app.route("/excel")
 def excel():
-    df = pd.DataFrame(session.get("resultados", []))
-
+    df = pd.DataFrame(resultados_global)
     output = io.BytesIO()
     df.to_excel(output, index=False)
     output.seek(0)
-
-    return send_file(output, download_name="RESULTADOS.xlsx", as_attachment=True)
+    return send_file(output, download_name="resultados.xlsx", as_attachment=True)
 
 # ==============================
 
