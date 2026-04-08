@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Simulacros PRO</title>
+<link rel="stylesheet" href="/static/style.css">
+
+<script>
+function mover(e,next){
+    let v = e.value.toUpperCase();
+    e.value = v;
+
+    if(["A","B","C","D","E"].includes(v)){
+        let n = document.getElementsByName("p"+next)[0];
+        if(n) n.focus();
+    }
+
+    actualizar();
+}
+
+function actualizar(){
+    let inputs = document.querySelectorAll("input.resp");
+    let llenos = 0;
+
+    inputs.forEach(i=>{
+        if(i.value!="") llenos++;
+    });
+
+    let p = Math.round((llenos/100)*100);
+    document.getElementById("barra").style.width = p+"%";
+}
+</script>
+
+</head>
+
+<body>
+
+<div class="sidebar">
+    <h2>📊 Simulacros</h2>
+
+    <form method="POST" enctype="multipart/form-data">
+        <p>Claves</p>
+        <input type="file" name="clave" onchange="this.form.submit()">
+
+        <p>Alumnos</p>
+        <input type="file" name="alumnos" onchange="this.form.submit()">
+    </form>
+
+    <div class="progress">
+        <div id="barra"></div>
+    </div>
+</div>
+
+<div class="main">
+
+<form method="POST">
+
+<div class="top">
+<select name="nombre">
+{% for a in alumnos %}
+<option>{{a}}</option>
+{% endfor %}
+</select>
+
+<select name="aula">
+{% for a in aulas %}
+<option>{{a}}</option>
+{% endfor %}
+</select>
+
+<button>Corregir</button>
+</div>
+
+<div class="grid">
+{% set i = 1 %}
+{% for curso, cant in cursos.items() %}
+<div class="card">
+<h3>{{curso}}</h3>
+
+<div class="inputs">
+{% for j in range(cant) %}
+<input class="resp" name="p{{i}}" maxlength="1" onkeyup="mover(this, {{i+1}})">
+{% set i = i + 1 %}
+{% endfor %}
+</div>
+
+</div>
+{% endfor %}
+</div>
+
+</form>
+
+{% if resultado %}
+<div class="resultado">
+<h2>🎯 Puntaje: {{resultado[3]}}</h2>
+
+<h3>📊 Eficiencia por curso</h3>
+
+{% for curso in detalle %}
+{% set total = cursos[curso] %}
+{% set valor = detalle[curso] %}
+{% set porcentaje = (valor / total * 100) | round(0) %}
+
+<div class="barra-curso">
+    <span>{{curso}} ({{valor}}/{{total}})</span>
+    <div class="fondo">
+        <div class="relleno" style="width: {{porcentaje}}%"></div>
+    </div>
+</div>
+
+{% endfor %}
+</div>
+{% endif %}
+
+</div>
+
+</body>
+</html>
